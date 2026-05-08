@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FiberRpcBrowserClient } from '../lib/fiber-rpc-browser';
+import {
+  FIBER_RPC_URL_KEY,
+  FIBER_CONNECTED_KEY,
+} from '../lib/storage-keys';
 
-const FIBER_RPC_URL_KEY = 'fiber-user-rpc-url';
-const FIBER_CONNECTED_KEY = 'fiber-user-rpc-connected';
 const DEFAULT_PAYER_RPC_URL = import.meta.env.PUBLIC_DEFAULT_PAYER_RPC_URL || 'http://127.0.0.1:28229';
 export const FIBER_STATE_CHANGE_EVENT = 'fiber-connection-state-change';
+export const FIBER_CONNECT_REQUESTED_EVENT = 'fiber-connect-requested';
 
 interface FiberNodeSummary {
   nodeId: string;
@@ -112,6 +115,15 @@ export function FiberConnectButton() {
     setShowDropdown(false);
     localStorage.setItem(FIBER_CONNECTED_KEY, 'false');
     window.dispatchEvent(new CustomEvent(FIBER_STATE_CHANGE_EVENT));
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      setIsModalOpen(true);
+      setConnectError(null);
+    };
+    window.addEventListener(FIBER_CONNECT_REQUESTED_EVENT, handler);
+    return () => window.removeEventListener(FIBER_CONNECT_REQUESTED_EVENT, handler);
   }, []);
 
   // Close dropdown on outside click

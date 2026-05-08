@@ -7,9 +7,12 @@ import {
   getCachedX402Credentials,
   cacheX402Credentials,
 } from '../lib/x402-client';
+import {
+  FIBER_RPC_URL_KEY,
+  FIBER_CONNECTED_KEY,
+  ARTICLE_CONTENT_KEY_PREFIX,
+} from '../lib/storage-keys';
 
-const FIBER_RPC_URL_KEY = 'fiber-user-rpc-url';
-const FIBER_CONNECTED_KEY = 'fiber-user-rpc-connected';
 const MERCHANT_FIBER_RPC_URL = import.meta.env.PUBLIC_MERCHANT_FIBER_RPC_URL || 'http://127.0.0.1:8230';
 const SHANNONS_PER_CKB = 100_000_000;
 
@@ -48,7 +51,6 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
   const [isPaid, setIsPaid] = useState(false);
   const [isFiberConnected, setIsFiberConnected] = useState(false);
   const [isAutoPaying, setIsAutoPaying] = useState(false);
-  const [copied, setCopied] = useState(false);
   const amountShannons = useMemo(() => priceToShannons(price), [price]);
   const amountDecimal = amountShannons.toString();
 
@@ -67,7 +69,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     const checkCache = async () => {
       setIsInitialLoading(true);
       try {
-        const cachedContent = localStorage.getItem(`l402-content-${articleId}`);
+        const cachedContent = localStorage.getItem(`${ARTICLE_CONTENT_KEY_PREFIX}-${articleId}`);
         if (cachedContent) {
           setIsPaid(true);
           setIsInitialLoading(false);
@@ -79,7 +81,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
           const verified = await verifyPayment(cached.invoice, cached.paymentPreimage);
           if (verified) {
             setIsPaid(true);
-            localStorage.setItem(`l402-content-${articleId}`, content);
+            localStorage.setItem(`${ARTICLE_CONTENT_KEY_PREFIX}-${articleId}`, content);
           }
         }
       } catch {
@@ -146,7 +148,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
 
     setIsPaid(true);
     cacheX402Credentials(articleId, invoice, paymentPreimage);
-    localStorage.setItem(`l402-content-${articleId}`, content);
+    localStorage.setItem(`${ARTICLE_CONTENT_KEY_PREFIX}-${articleId}`, content);
   };
 
   const initiatePayment = async () => {
@@ -235,23 +237,6 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     }
   };
 
-  const checkPayment = async (preimage: string) => {
-    if (!challenge) return;
-    setError(null);
-    try {
-      await unlockWithPayment(challenge.invoice, preimage || challenge.paymentPreimage);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid payment proof');
-    }
-  };
-
-  const copyInvoice = () => {
-    if (!challenge) return;
-    navigator.clipboard.writeText(challenge.invoice);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const renderedHtml = useMemo(() => {
     return marked.parse(content, { async: false }) as string;
   }, [content]);
@@ -311,7 +296,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
           </div>
 
           <div className="p-6 space-y-5">
-            {isFiberConnected && (
+            {isFiberConnected ? (
               <button
                 onClick={payWithConnectedNode}
                 disabled={isAutoPaying || isLoading}
@@ -331,64 +316,17 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
                   </>
                 )}
               </button>
+            ) : (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('fiber-connect-requested'))}
+                className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-accent px-6 py-4 text-base font-semibold text-white transition-all duration-200 hover:bg-accent-hover hover:shadow-lg cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Connect Node to Pay
+              </button>
             )}
-
-            {isFiberConnected && (
-              <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-border" />
-                <span className="text-xs text-text-muted">or pay manually</span>
-                <div className="h-px flex-1 bg-border" />
-              </div>
-            )}
-
-            <div>
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-text-muted">
-                Invoice
-              </label>
-              <div className="relative">
-                <code className="block max-h-24 overflow-y-auto rounded-xl border border-border bg-surface-2 p-4 font-mono text-xs leading-relaxed text-text-secondary break-all">
-                  {challenge.invoice}
-                </code>
-                <button
-                  onClick={copyInvoice}
-                  className="absolute right-2 top-2 rounded-lg bg-surface-3 px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-4 hover:text-text-primary cursor-pointer"
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const form = e.target as HTMLFormElement;
-                const input = form.elements.namedItem('preimage') as HTMLInputElement;
-                checkPayment(input.value.trim());
-              }}
-            >
-              <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-text-muted">
-                Payment Preimage
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="preimage"
-                  placeholder="0x... (optional)"
-                  disabled={isLoading}
-                  className="flex-1 rounded-xl border border-border bg-surface-2 px-4 py-3 font-mono text-sm text-text-primary placeholder-text-muted transition-colors focus:border-accent focus:outline-none disabled:opacity-50"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="rounded-xl bg-surface-3 px-5 py-3 text-sm font-semibold text-text-primary transition-colors hover:bg-surface-4 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {isLoading ? 'Verifying...' : 'Verify'}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-text-muted">
-                Pay the invoice with any Fiber wallet, then verify. Paste a preimage only if your wallet exposes one.
-              </p>
-            </form>
 
             {error && (
               <div className="rounded-xl bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
