@@ -13,8 +13,8 @@ import {
   ARTICLE_CONTENT_KEY_PREFIX,
 } from '../lib/storage-keys';
 
-const MERCHANT_FIBER_RPC_URL = import.meta.env.PUBLIC_MERCHANT_FIBER_RPC_URL || 'http://127.0.0.1:8230';
 const SHANNONS_PER_CKB = 100_000_000;
+const MERCHANT_PROXY_BASE_PATH = '/api';
 
 interface PaymentGateProps {
   articleId: string;
@@ -27,6 +27,15 @@ interface PaymentChallenge {
   invoice: string;
   paymentHash: string;
   paymentPreimage: string;
+}
+
+interface InvoiceResponse {
+  invoice_address?: string;
+  invoice?: {
+    data?: {
+      payment_hash?: string;
+    };
+  };
 }
 
 function priceToShannons(price: number): bigint {
@@ -96,7 +105,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     if (!payTo) return false;
 
     try {
-      const client = new X402Client(MERCHANT_FIBER_RPC_URL);
+      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
       const requirements = client.buildRequirements(
         payTo,
         amountDecimal,
@@ -119,7 +128,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     if (!payTo) return false;
 
     try {
-      const client = new X402Client(MERCHANT_FIBER_RPC_URL);
+      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
       const requirements = client.buildRequirements(payTo, amountDecimal);
       const payload = client.buildPayload(invoice, paymentPreimage, requirements);
 
@@ -159,17 +168,29 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
         throw new Error('Missing merchant payTo pubkey');
       }
 
-      const merchantClient = new FiberRpcBrowserClient(MERCHANT_FIBER_RPC_URL);
       const paymentPreimage = generatePaymentPreimage();
 
-      const invoiceResult = await merchantClient.newInvoice({
-        amount: toU128Hex(amountShannons),
-        description: `Article: ${articleId}`,
-        currency: 'Fibt',
-        expiry: '0xe10',
-        payment_preimage: paymentPreimage,
-        hash_algorithm: 'sha256',
+      const invoiceResponse = await fetch('/api/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: toU128Hex(amountShannons),
+          description: `Article: ${articleId}`,
+          currency: 'Fibt',
+          expiry: '0xe10',
+          payment_preimage: paymentPreimage,
+          hash_algorithm: 'sha256',
+        }),
       });
+
+      if (!invoiceResponse.ok) {
+        const data = await invoiceResponse.json().catch(() => ({ error: null }));
+        throw new Error(
+          typeof data?.error === 'string' ? data.error : 'Failed to generate invoice',
+        );
+      }
+
+      const invoiceResult = await invoiceResponse.json() as InvoiceResponse;
 
       if (!invoiceResult.invoice_address || !invoiceResult.invoice?.data?.payment_hash) {
         throw new Error('Failed to generate invoice');
@@ -202,7 +223,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
       const client = new FiberRpcBrowserClient(rpcUrl);
       const paymentResult = await client.sendPayment({
         invoice: challenge.invoice,
-        allow_self_payment: rpcUrl === MERCHANT_FIBER_RPC_URL ? true : undefined,
+        allow_self_payment: true,
       });
 
       const paymentHash = paymentResult.payment_hash;
