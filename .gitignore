@@ -1,43 +1,5 @@
-# Dependencies
-node_modules/
-.pnpm-store/
-
-# Build outputs
 dist/
-build/
-*.tsbuildinfo
-
-# Environment
+.astro/
+node_modules/
 .env
 .env.local
-.env.*.local
-
-# Testing
-coverage/
-*.lcov
-
-# Logs
-*.log
-logs/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Framework specific
-.astro/
-.vercel/
-.netlify/
-
-# Temporary
-tmp/
-temp/
-.cache/
-.tmp/

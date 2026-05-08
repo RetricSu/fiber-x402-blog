@@ -1,27 +1,19 @@
-# Fiber L402 (Simplified)
+# Fiber x402 Blog
 
-A simplified L402 paywall demo using native fnn x402 support.
+A blog demo with Fiber x402 paywall — built with Astro and React.
 
-## Branch Notes
+## Features
 
-This branch, `simplify-x402-native`, is the x402-native demo adaptation.
-
-- The payer node is connected through the browser-safe runtime proxy at `http://127.0.0.1:28229`
-- The merchant x402 node is the PR #1301 `fnn` binary at `http://127.0.0.1:8230`
-- The frontend calls the native FNN x402 endpoints directly: `/supported`, `/verify`, and `/settle`
-- The old proxy-based L402 flow is not used here
-
-## Architecture
-
-- **No proxy server** — direct browser-to-fnn x402 communication
-- **Static Astro build** — articles embedded at build time
-- **Native x402 endpoints** — uses fnn's built-in `/supported`, `/verify`, `/settle`
+- **Static site** — articles embedded at build time
+- **x402 paywall** — native Fiber Network payment protocol
+- **Direct node connection** — connect your Fiber node for instant payments
+- **Manual payment** — copy invoice and pay with any compatible wallet
 
 ## Prerequisites
 
 - Node.js 20+
 - pnpm 9+
-- Running Fiber node with x402 module enabled (RPC module `x402`)
+- Running Fiber node with x402 module enabled
 
 ## Setup
 
@@ -30,15 +22,16 @@ This branch, `simplify-x402-native`, is the x402-native demo adaptation.
 pnpm install
 ```
 
-2. Set your node's pubkey in `.env`:
-```env
-PUBLIC_PAY_TO_PUBKEY=your-node-pubkey-hex
+2. Configure environment:
+```bash
+cp .env.example .env
+# Edit .env with your node's pubkey
 ```
 
-3. Build and serve:
+3. Build and preview:
 ```bash
 pnpm build
-cd apps/web && pnpm preview
+pnpm preview
 ```
 
 ## How It Works
@@ -51,13 +44,11 @@ cd apps/web && pnpm preview
    - Frontend verifies payment via fnn's native `/verify` endpoint
    - Content unlocks and is cached in localStorage
 
-## Differences from Original
+## Architecture
 
-- Removed Express proxy server
-- Removed L402Middleware and macaroon-based auth
-- Removed `@fiber-pay/sdk` server-side dependency
-- Uses fnn's native x402 HTTP endpoints instead
-- Static build instead of server-rendered
+- **No proxy server** — direct browser-to-fnn x402 communication
+- **Static Astro build** — articles embedded at build time
+- **Native x402 endpoints** — uses fnn's built-in `/supported`, `/verify`, `/settle`
 
 ## License
 
