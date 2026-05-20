@@ -1,8 +1,11 @@
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, parse } from 'path';
-import { fileURLToPath } from 'url';
+import { parse } from 'path';
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const DEFAULT_PRICE = 0.1;
+const articleModules = import.meta.glob<string>('../content/articles/*.{md,mdx}', {
+  eager: true,
+  import: 'default',
+  query: '?raw',
+});
 
 export interface ArticleFrontmatter {
   id: string;
@@ -24,7 +27,11 @@ export interface Article {
   tags: string[];
 }
 
-let cache: Map<string, Article> | null = null;
+function normalizePrice(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_PRICE;
+}
 
 function parseFrontmatter(content: string): { frontmatter: ArticleFrontmatter; body: string } {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
@@ -37,7 +44,7 @@ function parseFrontmatter(content: string): { frontmatter: ArticleFrontmatter; b
         title: '',
         author: '',
         date: '',
-        price: 0.1,
+        price: DEFAULT_PRICE,
         tags: [],
       },
       body: content,
@@ -62,9 +69,9 @@ function parseFrontmatter(content: string): { frontmatter: ArticleFrontmatter; b
         );
       } else if (key === 'price') {
         const parsedPrice = Number(value);
-        (frontmatter as Record<string, unknown>)[key] = Number.isFinite(parsedPrice)
+        (frontmatter as Record<string, unknown>)[key] = Number.isFinite(parsedPrice) && parsedPrice > 0
           ? parsedPrice
-          : 0.1;
+          : DEFAULT_PRICE;
       } else {
         (frontmatter as Record<string, unknown>)[key] = value.replace(/^["']|["']$/g, '');
       }
@@ -77,7 +84,7 @@ function parseFrontmatter(content: string): { frontmatter: ArticleFrontmatter; b
       title: frontmatter.title || '',
       author: frontmatter.author || '',
       date: frontmatter.date || '',
-      price: frontmatter.price ?? 0.1,
+      price: normalizePrice(frontmatter.price),
       tags: frontmatter.tags || [],
     },
     body,
@@ -101,8 +108,7 @@ function generatePreview(body: string, maxLength: number = 200): string {
   return text.slice(0, lastSpace > 0 ? lastSpace : maxLength) + '...';
 }
 
-function loadArticleFromFile(filepath: string): Article {
-  const content = readFileSync(filepath, 'utf-8');
+function loadArticleFromContent(filepath: string, content: string): Article {
   const { frontmatter, body } = parseFrontmatter(content);
   const filename = parse(filepath).name;
 
@@ -111,7 +117,7 @@ function loadArticleFromFile(filepath: string): Article {
     title: frontmatter.title || 'Untitled',
     author: frontmatter.author || 'Unknown',
     date: frontmatter.date || new Date().toISOString().split('T')[0],
-    price: frontmatter.price ?? 0.1,
+    price: normalizePrice(frontmatter.price),
     preview: generatePreview(body),
     content: body,
     tags: frontmatter.tags || [],
@@ -119,38 +125,20 @@ function loadArticleFromFile(filepath: string): Article {
 }
 
 export function loadAllArticles(): Article[] {
-  if (cache) {
-    return Array.from(cache.values());
-  }
+  const articles: Article[] = [];
 
-  const articlesDir = join(process.cwd(), 'src/content/articles');
-  cache = new Map();
-
-  if (!existsSync(articlesDir)) {
-    return [];
-  }
-
-  const files = readdirSync(articlesDir).filter(f => 
-    f.endsWith('.md') || f.endsWith('.mdx')
-  );
-
-  for (const file of files) {
+  for (const [filepath, content] of Object.entries(articleModules).sort(([a], [b]) => a.localeCompare(b))) {
     try {
-      const article = loadArticleFromFile(join(articlesDir, file));
-      cache.set(article.id, article);
+      articles.push(loadArticleFromContent(filepath, content));
     } catch (error) {
-      console.error(`Failed to load article ${file}:`, error);
+      console.error(`Failed to load article ${filepath}:`, error);
     }
   }
 
-  return Array.from(cache.values());
+  return articles;
 }
 
 export function getArticleById(id: string): Article | null {
   const articles = loadAllArticles();
-  return cache?.get(id) || null;
-}
-
-export function clearArticleCache(): void {
-  cache = null;
+  return articles.find(article => article.id === id) || null;
 }

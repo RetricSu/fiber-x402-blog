@@ -151,8 +151,24 @@ export function getX402CacheKey(articleId: string): string {
 
 export function getCachedX402Credentials(articleId: string): { invoice: string; paymentPreimage: string } | null {
   if (typeof window === 'undefined') return null;
-  const cached = localStorage.getItem(getX402CacheKey(articleId));
-  return cached ? JSON.parse(cached) : null;
+  const cacheKey = getX402CacheKey(articleId);
+  const cached = localStorage.getItem(cacheKey);
+  if (!cached) return null;
+
+  try {
+    const parsed = JSON.parse(cached) as Partial<{ invoice: unknown; paymentPreimage: unknown }>;
+    if (typeof parsed.invoice !== 'string' || typeof parsed.paymentPreimage !== 'string') {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    return {
+      invoice: parsed.invoice,
+      paymentPreimage: parsed.paymentPreimage,
+    };
+  } catch {
+    localStorage.removeItem(cacheKey);
+    return null;
+  }
 }
 
 export function cacheX402Credentials(articleId: string, invoice: string, paymentPreimage: string): void {

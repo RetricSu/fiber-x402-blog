@@ -74,6 +74,55 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     return () => window.removeEventListener(FIBER_STATE_CHANGE_EVENT, syncConnectionState);
   }, [syncConnectionState]);
 
+  const verifyPayment = useCallback(async (
+    invoice: string,
+    paymentPreimage: string,
+  ): Promise<boolean> => {
+    if (!payTo) return false;
+
+    try {
+      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
+      const requirements = client.buildRequirements(
+        payTo,
+        amountDecimal,
+      );
+      const payload = client.buildPayload(invoice, paymentPreimage, requirements);
+
+      const response = await client.verify({
+        x402Version: 2,
+        paymentPayload: payload,
+        paymentRequirements: requirements,
+      });
+
+      return response.isValid;
+    } catch {
+      return false;
+    }
+  }, [amountDecimal, payTo]);
+
+  const settlePayment = useCallback(async (
+    invoice: string,
+    paymentPreimage: string,
+  ): Promise<boolean> => {
+    if (!payTo) return false;
+
+    try {
+      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
+      const requirements = client.buildRequirements(payTo, amountDecimal);
+      const payload = client.buildPayload(invoice, paymentPreimage, requirements);
+
+      const response = await client.settle({
+        x402Version: 2,
+        paymentPayload: payload,
+        paymentRequirements: requirements,
+      });
+
+      return response.success;
+    } catch {
+      return false;
+    }
+  }, [amountDecimal, payTo]);
+
   useEffect(() => {
     const checkCache = async () => {
       setIsInitialLoading(true);
@@ -99,52 +148,9 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
       }
     };
     checkCache();
-  }, [articleId, content]);
+  }, [articleId, content, verifyPayment]);
 
-  const verifyPayment = async (invoice: string, paymentPreimage: string): Promise<boolean> => {
-    if (!payTo) return false;
-
-    try {
-      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
-      const requirements = client.buildRequirements(
-        payTo,
-        amountDecimal,
-      );
-      const payload = client.buildPayload(invoice, paymentPreimage, requirements);
-
-      const response = await client.verify({
-        x402Version: 2,
-        paymentPayload: payload,
-        paymentRequirements: requirements,
-      });
-
-      return response.isValid;
-    } catch {
-      return false;
-    }
-  };
-
-  const settlePayment = async (invoice: string, paymentPreimage: string): Promise<boolean> => {
-    if (!payTo) return false;
-
-    try {
-      const client = new X402Client(MERCHANT_PROXY_BASE_PATH);
-      const requirements = client.buildRequirements(payTo, amountDecimal);
-      const payload = client.buildPayload(invoice, paymentPreimage, requirements);
-
-      const response = await client.settle({
-        x402Version: 2,
-        paymentPayload: payload,
-        paymentRequirements: requirements,
-      });
-
-      return response.success;
-    } catch {
-      return false;
-    }
-  };
-
-  const unlockWithPayment = async (invoice: string, paymentPreimage: string) => {
+  const unlockWithPayment = useCallback(async (invoice: string, paymentPreimage: string) => {
     const verified = await verifyPayment(invoice, paymentPreimage);
     if (!verified) {
       throw new Error('Payment verification failed');
@@ -158,7 +164,7 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     setIsPaid(true);
     cacheX402Credentials(articleId, invoice, paymentPreimage);
     localStorage.setItem(`${ARTICLE_CONTENT_KEY_PREFIX}-${articleId}`, content);
-  };
+  }, [articleId, content, settlePayment, verifyPayment]);
 
   const initiatePayment = async () => {
     setIsLoading(true);
@@ -166,6 +172,9 @@ export function PaymentGate({ articleId, price, content, payTo }: PaymentGatePro
     try {
       if (!payTo) {
         throw new Error('Missing merchant payTo pubkey');
+      }
+      if (amountShannons <= 0n) {
+        throw new Error('Invalid article price');
       }
 
       const paymentPreimage = generatePaymentPreimage();
