@@ -18,6 +18,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/mdx": "^4.3.14",
     "@astrojs/node": "^9.5.5",
     "@astrojs/react": "^4.0.0",
     "@fiber-pay/sdk": "0.2.5",
@@ -29,7 +30,6 @@
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
-    "@astrojs/vercel": "^8.2.11",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1"
   }

@@ -66,7 +66,7 @@ const allTags = Array.from(tagSet).sort();
                     <span class="text-base font-medium text-text-primary group-hover:text-accent transition-colors">
                       {article.title}
                     </span>
-                    {article.price > 0 && (
+                    {Number.isFinite(article.price) && article.price > 0 && (
                       <span class="ml-2 text-xs text-accent font-medium">{article.price} CKB</span>
                     )}
                     {article.tags && article.tags.length > 0 && (
